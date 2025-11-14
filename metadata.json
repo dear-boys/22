@@ -1,0 +1,5 @@
+{
+  "name": "Gemini AI Content Generator",
+  "description": "A web application that uses the Gemini API to generate text and images based on user prompts, with a user interface in Farsi.",
+  "requestFramePermissions": []
+}
