@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -8,25 +7,195 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Vazirmatn:wght@100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap" rel="stylesheet">
     <style>
       body {
-        font-family: 'Vazirmatn', 'Inter', sans-serif;
+        font-family: 'Vazirmatn', sans-serif;
+        background-color: #0d1117;
+        color: #c9d1d9;
+      }
+      .card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+      .ai-output {
+        min-height: 200px;
+        overflow-wrap: break-word;
+        white-space: pre-wrap;
+        border-left: 4px solid #58a6ff;
+        background-color: #0d1117;
+      }
+      .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #58a6ff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+      input[type="radio"]:checked + label {
+          background-color: #2563eb; /* Tailwind's blue-600 */
+          color: white;
+          border-color: #2563eb;
       }
     </style>
-<script type="importmap">
+    <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
 </head>
 <body class="bg-[#0d1117] text-[#c9d1d9]">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <main class="container mx-auto flex flex-col items-center px-4 py-8">
+      <div class="text-center mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-white">
+          مولد هوش مصنوعی Gemini
+        </h1>
+        <p class="text-gray-400 mt-2">
+          تولید متن یا تصویر با استفاده از Gemini API.
+        </p>
+      </div>
+
+      <div class="card p-6 md:p-10 w-full max-w-2xl rounded-xl shadow-lg">
+        <!-- Prompt Input -->
+        <div class="mb-6">
+          <label for="prompt-input" class="block text-sm font-medium mb-2">پرامپت خود را وارد کنید:</label>
+          <textarea id="prompt-input" rows="4" class="w-full p-3 bg-[#0d1117] border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-white placeholder-gray-500 transition-colors" placeholder="مثال: یک نقاشی دیجیتال از یک گربه فضانورد که در حال نواختن گیتار است."></textarea>
+        </div>
+        
+        <!-- Type Selector -->
+        <div class="mb-6">
+            <span class="block text-sm font-medium mb-3 text-center">نوع تولید:</span>
+            <div class="flex space-x-4 space-x-reverse justify-center">
+                <div>
+                    <input type="radio" id="type-text" name="ai-type" value="text" class="hidden" checked>
+                    <label for="type-text" class="px-5 py-2 cursor-pointer rounded-full border border-gray-600 transition duration-200 hover:bg-gray-700">تولید متن (شعر/جواب)</label>
+                </div>
+                <div>
+                    <input type="radio" id="type-image" name="ai-type" value="image" class="hidden">
+                    <label for="type-image" class="px-5 py-2 cursor-pointer rounded-full border border-gray-600 transition duration-200 hover:bg-gray-700">تولید تصویر (Image)</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generate Button -->
+        <button id="generate-button" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+            <span id="button-text">تولید محتوا</span>
+            <div id="loading-spinner" class="spinner mr-2 hidden"></div>
+        </button>
+
+        <!-- Error Message -->
+        <div id="error-message" class="text-red-400 mt-4 text-center hidden"></div>
+      </div>
+
+      <!-- Output Display -->
+      <div class="card mt-8 p-6 md:p-10 w-full max-w-2xl rounded-xl shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-white">خروجی هوش مصنوعی</h2>
+        <div id="ai-output" class="ai-output p-4 rounded-lg">
+           <p class="text-gray-500">محتوای تولید شده در اینجا نمایش داده خواهد شد.</p>
+        </div>
+      </div>
+    </main>
+    
+    <script type="module">
+        import { GoogleGenAI, Modality } from "@google/genai";
+
+        // DOM Elements
+        const promptInput = document.getElementById('prompt-input');
+        const generateButton = document.getElementById('generate-button');
+        const buttonText = document.getElementById('button-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const aiOutput = document.getElementById('ai-output');
+        const errorMessage = document.getElementById('error-message');
+
+        if (!process.env.API_KEY) {
+            errorMessage.textContent = "خطا: کلید API تعریف نشده است. لطفاً متغیر محیطی API_KEY را تنظیم کنید.";
+            errorMessage.classList.remove('hidden');
+            generateButton.disabled = true;
+        }
+
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        async function handleGenerate() {
+            if (!process.env.API_KEY || generateButton.disabled) return;
+            
+            const prompt = promptInput.value.trim();
+            const selectedType = document.querySelector('input[name="ai-type"]:checked').value;
+
+            // Reset UI
+            errorMessage.classList.add('hidden');
+            aiOutput.innerHTML = '<p class="text-gray-500">در حال تولید محتوا...</p>';
+
+            if (prompt === "") {
+                errorMessage.textContent = "لطفاً یک پرامپت معتبر وارد کنید.";
+                errorMessage.classList.remove('hidden');
+                aiOutput.innerHTML = '<p class="text-gray-500">محتوای تولید شده در اینجا نمایش داده خواهد شد.</p>';
+                return;
+            }
+
+            // Set loading state
+            generateButton.disabled = true;
+            buttonText.textContent = 'در حال پردازش...';
+            loadingSpinner.classList.remove('hidden');
+
+            try {
+                let resultOutput = '';
+                if (selectedType === 'text') {
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: prompt,
+                    });
+                    resultOutput = `<div class="whitespace-pre-wrap text-gray-300">${response.text}</div>`;
+                } else if (selectedType === 'image') {
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash-image',
+                        contents: {
+                            parts: [{ text: prompt }],
+                        },
+                        config: {
+                            responseModalities: [Modality.IMAGE],
+                        },
+                    });
+                    
+                    const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                    if (imagePart?.inlineData) {
+                         const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+                         resultOutput = `<img
+                            src="${imageUrl}"
+                            alt="${prompt.substring(0, 100)}"
+                            class="rounded-lg shadow-lg max-w-full h-auto mx-auto mt-4 border border-[#30363d]"
+                            style="max-width: 400px;"
+                          />`;
+                    } else {
+                        throw new Error("داده تصویر در پاسخ API یافت نشد.");
+                    }
+                }
+                aiOutput.innerHTML = resultOutput;
+
+            } catch (error) {
+                console.error("Error during API call:", error);
+                const errorText = error instanceof Error ? error.message : 'یک خطای ناشناخته رخ داد.';
+                errorMessage.textContent = `خطا: ${errorText}`;
+                errorMessage.classList.remove('hidden');
+                aiOutput.innerHTML = '<p class="text-red-400">متأسفانه در تولید محتوا خطایی رخ داد.</p>';
+            } finally {
+                // Reset button state
+                generateButton.disabled = false;
+                buttonText.textContent = 'تولید محتوا';
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+        
+        generateButton.addEventListener('click', handleGenerate);
+    </script>
 </body>
 </html>
